@@ -12,5 +12,10 @@ interface UsuarioRepository {
     suspend fun registrar(nombre: String, correo: String, password: String, rol: Rol): Result<Usuario>
     suspend fun iniciarSesion(correo: String, password: String): Result<Usuario>
     suspend fun obtener(id: Long): Usuario?
-    suspend fun listarAuxiliares(): List<Usuario>
+
+    /** Usuarios a los que se puede asignar un ticket: encargados de TI y personal auxiliar. */
+    suspend fun listarAsignables(): List<Usuario>
+
+    suspend fun actualizarNombre(id: Long, nombre: String): Result<Usuario>
+    suspend fun cambiarPassword(id: Long, actual: String, nueva: String): Result<Unit>
 }
