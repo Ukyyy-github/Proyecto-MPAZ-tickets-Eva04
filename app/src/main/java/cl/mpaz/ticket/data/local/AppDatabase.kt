@@ -4,20 +4,40 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverter
+import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import cl.mpaz.ticket.model.Adjunto
+import cl.mpaz.ticket.model.Categoria
 import cl.mpaz.ticket.model.Comentario
+import cl.mpaz.ticket.model.EstadoTicket
+import cl.mpaz.ticket.model.Prioridad
 import cl.mpaz.ticket.model.Rol
 import cl.mpaz.ticket.model.Ticket
 import cl.mpaz.ticket.model.Usuario
 import cl.mpaz.ticket.util.Seguridad
+
+class Converters {
+    @TypeConverter fun fromRol(rol: Rol): String = rol.name
+    @TypeConverter fun toRol(value: String): Rol = Rol.valueOf(value)
+
+    @TypeConverter fun fromCategoria(categoria: Categoria): String = categoria.name
+    @TypeConverter fun toCategoria(value: String): Categoria = Categoria.valueOf(value)
+
+    @TypeConverter fun fromEstado(estado: EstadoTicket): String = estado.name
+    @TypeConverter fun toEstado(value: String): EstadoTicket = EstadoTicket.valueOf(value)
+
+    @TypeConverter fun fromPrioridad(prioridad: Prioridad): String = prioridad.name
+    @TypeConverter fun toPrioridad(value: String): Prioridad = Prioridad.valueOf(value)
+}
 
 @Database(
     entities = [Usuario::class, Ticket::class, Comentario::class, Adjunto::class],
     version = 2,
     exportSchema = false
 )
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun usuarioDao(): UsuarioDao
     abstract fun ticketDao(): TicketDao
