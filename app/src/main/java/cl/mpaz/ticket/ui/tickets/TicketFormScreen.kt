@@ -1,19 +1,15 @@
 package cl.mpaz.ticket.ui.tickets
 
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -37,13 +33,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cl.mpaz.ticket.model.Categoria
 import cl.mpaz.ticket.ui.components.CampoFormulario
-import cl.mpaz.ticket.ui.components.ImagenTicket
 import cl.mpaz.ticket.ui.components.SelectorDropdown
+import cl.mpaz.ticket.util.ReglasTicket
 import cl.mpaz.ticket.util.Validadores
+import cl.mpaz.ticket.util.formatearTamano
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,12 +53,11 @@ fun TicketFormScreen(
     var categoria by rememberSaveable { mutableStateOf(Categoria.TECNOLOGIA) }
     var ubicacion by rememberSaveable { mutableStateOf("") }
     var descripcion by rememberSaveable { mutableStateOf("") }
-    var fotoNueva by rememberSaveable { mutableStateOf<Uri?>(null) }
-    var quitarFoto by rememberSaveable { mutableStateOf(false) }
     var precargado by rememberSaveable { mutableStateOf(!esEdicion) }
     var intento by rememberSaveable { mutableStateOf(false) }
 
     val existente by viewModel.ticketExistente.collectAsState()
+    val pendientes by viewModel.pendientes.collectAsState()
     val guardando by viewModel.guardando.collectAsState()
     val guardado by viewModel.guardado.collectAsState()
     val error by viewModel.error.collectAsState()
@@ -79,12 +75,9 @@ fun TicketFormScreen(
     }
     LaunchedEffect(guardado) { if (guardado) onVolver() }
 
-    val selectorFoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) {
-            fotoNueva = uri
-            quitarFoto = false
-        }
-    }
+    val selectorDocumentos = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris -> viewModel.agregarArchivos(uris) }
 
     val errorTitulo = if (intento) Validadores.tituloTicket(titulo) else null
     val errorUbicacion = if (intento) Validadores.ubicacion(ubicacion) else null
@@ -97,15 +90,7 @@ fun TicketFormScreen(
             Validadores.ubicacion(ubicacion),
             Validadores.descripcion(descripcion)
         ).all { it == null }
-        if (sinErrores) {
-            viewModel.guardar(titulo, categoria, ubicacion, descripcion, fotoNueva, quitarFoto)
-        }
-    }
-
-    val fotoMostrada: Any? = when {
-        quitarFoto -> null
-        fotoNueva != null -> fotoNueva
-        else -> existente?.fotoPath
+        if (sinErrores) viewModel.guardar(titulo, categoria, ubicacion, descripcion)
     }
 
     Scaffold(
@@ -156,31 +141,45 @@ fun TicketFormScreen(
                 minLines = 4
             )
 
-            Text("Fotografía (opcional)", style = MaterialTheme.typography.titleSmall)
-            if (fotoMostrada != null) {
-                ImagenTicket(
-                    fuente = fotoMostrada,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp)
-                        .clip(RoundedCornerShape(12.dp))
+            if (esEdicion) {
+                Text(
+                    "Los documentos adjuntos se gestionan desde el detalle del ticket.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = {
-                        selectorFoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    }) { Text("Cambiar foto") }
-                    TextButton(onClick = {
-                        fotoNueva = null
-                        quitarFoto = true
-                    }) { Text("Quitar foto") }
-                }
             } else {
+                Text("Documentos adjuntos (opcional)", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Fotos, PDF, Word, Excel u otros archivos. Máximo ${ReglasTicket.MAX_ADJUNTOS} de hasta 10 MB cada uno.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                pendientes.forEach { archivo ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                archivo.nombre,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                formatearTamano(archivo.tamano),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        TextButton(onClick = { viewModel.quitarPendiente(archivo) }) { Text("Quitar") }
+                    }
+                }
                 OutlinedButton(
-                    onClick = {
-                        selectorFoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    },
+                    onClick = { selectorDocumentos.launch(arrayOf("*/*")) },
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("Adjuntar foto") }
+                ) { Text(if (pendientes.isEmpty()) "Adjuntar documentos" else "Adjuntar más documentos") }
             }
 
             error?.let {

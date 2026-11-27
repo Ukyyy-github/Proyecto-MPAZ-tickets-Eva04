@@ -2,7 +2,7 @@ package cl.mpaz.ticket
 
 import android.app.Application
 import android.content.Context
-import cl.mpaz.ticket.data.FotoStorage
+import cl.mpaz.ticket.data.AdjuntoStorage
 import cl.mpaz.ticket.data.local.AppDatabase
 import cl.mpaz.ticket.data.repository.LocalTicketRepository
 import cl.mpaz.ticket.data.repository.LocalUsuarioRepository
@@ -15,10 +15,10 @@ class AppContainer(context: Context) {
     private val db = AppDatabase.obtener(context)
 
     val sesion = SesionActual(context)
-    val fotos = FotoStorage(context)
+    val adjuntos = AdjuntoStorage(context)
     val usuarioRepository: UsuarioRepository = LocalUsuarioRepository(db.usuarioDao())
     val ticketRepository: TicketRepository =
-        LocalTicketRepository(db.ticketDao(), db.comentarioDao())
+        LocalTicketRepository(db.ticketDao(), db.comentarioDao(), db.adjuntoDao())
 }
 
 class MpazApp : Application() {
