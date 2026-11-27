@@ -6,7 +6,6 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
-import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import cl.mpaz.ticket.model.Adjunto
 import cl.mpaz.ticket.model.Categoria
@@ -55,69 +54,10 @@ abstract class AppDatabase : RoomDatabase() {
                     "mpaz_ticket.db"
                 )
                     .addCallback(CargaInicial)
-                    .addMigrations(MIGRACION_1_2)
+                    .fallbackToDestructiveMigration(true)
                     .build()
                     .also { instancia = it }
             }
-    }
-}
-
-/**
- * Versión 2: agrega la tabla de adjuntos (documentos de cualquier tipo), convierte las fotos
- * existentes en adjuntos, elimina la columna fotoPath de tickets y agrega un auxiliar de demostración.
- */
-val MIGRACION_1_2 = object : Migration(1, 2) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-        db.execSQL(
-            "CREATE TABLE IF NOT EXISTS adjuntos (" +
-                "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-                "ticketId INTEGER NOT NULL, " +
-                "nombre TEXT NOT NULL, " +
-                "tipoMime TEXT NOT NULL, " +
-                "ruta TEXT NOT NULL, " +
-                "tamano INTEGER NOT NULL, " +
-                "subidoPorId INTEGER NOT NULL, " +
-                "subidoPorNombre TEXT NOT NULL, " +
-                "creadoEn INTEGER NOT NULL)"
-        )
-        db.execSQL("CREATE INDEX IF NOT EXISTS index_adjuntos_ticketId ON adjuntos (ticketId)")
-
-        // Las fotos que ya existían pasan a ser adjuntos de tipo imagen.
-        db.execSQL(
-            "INSERT INTO adjuntos (ticketId, nombre, tipoMime, ruta, tamano, subidoPorId, subidoPorNombre, creadoEn) " +
-                "SELECT id, 'foto.jpg', 'image/jpeg', fotoPath, 0, solicitanteId, solicitanteNombre, creadoEn " +
-                "FROM tickets WHERE fotoPath IS NOT NULL"
-        )
-
-        // SQLite no puede quitar una columna en todas las versiones de Android: se recrea la tabla.
-        db.execSQL(
-            "CREATE TABLE tickets_nueva (" +
-                "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-                "titulo TEXT NOT NULL, " +
-                "categoria TEXT NOT NULL, " +
-                "ubicacion TEXT NOT NULL, " +
-                "descripcion TEXT NOT NULL, " +
-                "prioridad TEXT NOT NULL, " +
-                "estado TEXT NOT NULL, " +
-                "solicitanteId INTEGER NOT NULL, " +
-                "solicitanteNombre TEXT NOT NULL, " +
-                "asignadoId INTEGER, " +
-                "asignadoNombre TEXT, " +
-                "creadoEn INTEGER NOT NULL, " +
-                "actualizadoEn INTEGER NOT NULL, " +
-                "resueltoEn INTEGER)"
-        )
-        db.execSQL(
-            "INSERT INTO tickets_nueva (id, titulo, categoria, ubicacion, descripcion, prioridad, estado, " +
-                "solicitanteId, solicitanteNombre, asignadoId, asignadoNombre, creadoEn, actualizadoEn, resueltoEn) " +
-                "SELECT id, titulo, categoria, ubicacion, descripcion, prioridad, estado, " +
-                "solicitanteId, solicitanteNombre, asignadoId, asignadoNombre, creadoEn, actualizadoEn, resueltoEn " +
-                "FROM tickets"
-        )
-        db.execSQL("DROP TABLE tickets")
-        db.execSQL("ALTER TABLE tickets_nueva RENAME TO tickets")
-
-        sembrarUsuariosDemo(db)
     }
 }
 
@@ -140,6 +80,11 @@ private fun sembrarUsuariosDemo(db: SupportSQLiteDatabase) {
 
 private object CargaInicial : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
+        sembrarUsuariosDemo(db)
+    }
+
+    override fun onOpen(db: SupportSQLiteDatabase) {
+        super.onOpen(db)
         sembrarUsuariosDemo(db)
     }
 }
