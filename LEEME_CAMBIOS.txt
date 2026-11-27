@@ -1,0 +1,3 @@
+MPAZ Ticket v2 - archivos nuevos o modificados (31)
+Copiar sobre la raíz del repo (mezcla carpetas; NO toca build.gradle.kts ni libs.versions.toml).
+BORRAR a mano: app/src/main/java/cl/mpaz/ticket/data/FotoStorage.kt  (reemplazado por AdjuntoStorage.kt)
