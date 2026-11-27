@@ -1,12 +1,13 @@
 package cl.mpaz.ticket.data.repository
 
+import cl.mpaz.ticket.data.local.AdjuntoDao
 import cl.mpaz.ticket.data.local.ComentarioDao
 import cl.mpaz.ticket.data.local.TicketDao
+import cl.mpaz.ticket.model.Adjunto
 import cl.mpaz.ticket.model.Categoria
 import cl.mpaz.ticket.model.Comentario
 import cl.mpaz.ticket.model.EstadoTicket
 import cl.mpaz.ticket.model.Prioridad
-import cl.mpaz.ticket.model.Rol
 import cl.mpaz.ticket.model.Ticket
 import cl.mpaz.ticket.model.Usuario
 import kotlinx.coroutines.flow.Flow
@@ -14,19 +15,19 @@ import kotlinx.coroutines.flow.Flow
 class LocalTicketRepository(
     private val ticketDao: TicketDao,
     private val comentarioDao: ComentarioDao,
+    private val adjuntoDao: AdjuntoDao,
     private val reloj: () -> Long = { System.currentTimeMillis() }
 ) : TicketRepository {
 
-    override fun observarVisibles(usuario: Usuario): Flow<List<Ticket>> = when (usuario.rol) {
-        Rol.ENCARGADO_TI -> ticketDao.observarTodos()
-        Rol.FUNCIONARIO -> ticketDao.observarPorSolicitante(usuario.id)
-        Rol.AUXILIAR -> ticketDao.observarPorAsignado(usuario.id)
-    }
+    override fun observarTodos(): Flow<List<Ticket>> = ticketDao.observarTodos()
 
     override fun observar(id: Long): Flow<Ticket?> = ticketDao.observarPorId(id)
 
     override fun observarHistorial(ticketId: Long): Flow<List<Comentario>> =
         comentarioDao.observarPorTicket(ticketId)
+
+    override fun observarAdjuntos(ticketId: Long): Flow<List<Adjunto>> =
+        adjuntoDao.observarPorTicket(ticketId)
 
     override suspend fun obtener(id: Long): Ticket? = ticketDao.buscarPorId(id)
 
@@ -35,7 +36,6 @@ class LocalTicketRepository(
         categoria: Categoria,
         ubicacion: String,
         descripcion: String,
-        fotoPath: String?,
         solicitante: Usuario
     ): Long {
         val ahora = reloj()
@@ -45,7 +45,6 @@ class LocalTicketRepository(
                 categoria = categoria,
                 ubicacion = ubicacion.trim(),
                 descripcion = descripcion.trim(),
-                fotoPath = fotoPath,
                 solicitanteId = solicitante.id,
                 solicitanteNombre = solicitante.nombre,
                 creadoEn = ahora,
@@ -62,7 +61,6 @@ class LocalTicketRepository(
         categoria: Categoria,
         ubicacion: String,
         descripcion: String,
-        fotoPath: String?,
         autor: Usuario
     ) {
         val ticket = ticketDao.buscarPorId(ticketId) ?: return
@@ -73,7 +71,6 @@ class LocalTicketRepository(
                 categoria = categoria,
                 ubicacion = ubicacion.trim(),
                 descripcion = descripcion.trim(),
-                fotoPath = fotoPath,
                 actualizadoEn = ahora
             )
         )
@@ -83,6 +80,7 @@ class LocalTicketRepository(
     override suspend fun eliminar(ticketId: Long) {
         val ticket = ticketDao.buscarPorId(ticketId) ?: return
         comentarioDao.eliminarPorTicket(ticketId)
+        adjuntoDao.eliminarPorTicket(ticketId)
         ticketDao.eliminar(ticket)
     }
 
@@ -112,7 +110,7 @@ class LocalTicketRepository(
         registrar(ticketId, autor, "Prioridad: ${ticket.prioridad.etiqueta} → ${prioridad.etiqueta}", ahora)
     }
 
-    override suspend fun asignar(ticketId: Long, auxiliar: Usuario, autor: Usuario) {
+    override suspend fun asignar(ticketId: Long, asignado: Usuario, autor: Usuario) {
         val ticket = ticketDao.buscarPorId(ticketId) ?: return
         val ahora = reloj()
         val nuevoEstado =
@@ -121,15 +119,35 @@ class LocalTicketRepository(
             } else ticket.estado
         ticketDao.actualizar(
             ticket.copy(
-                asignadoId = auxiliar.id,
-                asignadoNombre = auxiliar.nombre,
+                asignadoId = asignado.id,
+                asignadoNombre = asignado.nombre,
                 estado = nuevoEstado,
                 actualizadoEn = ahora
             )
         )
         val detalleEstado =
             if (nuevoEstado != ticket.estado) " (estado: ${nuevoEstado.etiqueta})" else ""
-        registrar(ticketId, autor, "Asignado a ${auxiliar.nombre}$detalleEstado", ahora)
+        registrar(ticketId, autor, "Asignado a ${asignado.nombre}$detalleEstado", ahora)
+    }
+
+    override suspend fun quitarAsignacion(ticketId: Long, autor: Usuario) {
+        val ticket = ticketDao.buscarPorId(ticketId) ?: return
+        if (ticket.asignadoId == null) return
+        val ahora = reloj()
+        // Un ticket "Asignado" sin responsable vuelve a "Revisado"; los demás estados se mantienen.
+        val nuevoEstado =
+            if (ticket.estado == EstadoTicket.ASIGNADO) EstadoTicket.REVISADO else ticket.estado
+        ticketDao.actualizar(
+            ticket.copy(
+                asignadoId = null,
+                asignadoNombre = null,
+                estado = nuevoEstado,
+                actualizadoEn = ahora
+            )
+        )
+        val detalleEstado =
+            if (nuevoEstado != ticket.estado) " (estado: ${nuevoEstado.etiqueta})" else ""
+        registrar(ticketId, autor, "Asignación quitada (era ${ticket.asignadoNombre})$detalleEstado", ahora)
     }
 
     override suspend fun comentar(ticketId: Long, autor: Usuario, texto: String) {
@@ -143,6 +161,36 @@ class LocalTicketRepository(
                 creadoEn = ahora
             )
         )
+    }
+
+    override suspend fun agregarAdjunto(
+        ticketId: Long,
+        nombre: String,
+        tipoMime: String,
+        ruta: String,
+        tamano: Long,
+        autor: Usuario
+    ) {
+        val ahora = reloj()
+        adjuntoDao.insertar(
+            Adjunto(
+                ticketId = ticketId,
+                nombre = nombre,
+                tipoMime = tipoMime,
+                ruta = ruta,
+                tamano = tamano,
+                subidoPorId = autor.id,
+                subidoPorNombre = autor.nombre,
+                creadoEn = ahora
+            )
+        )
+        registrar(ticketId, autor, "Documento agregado: $nombre", ahora)
+    }
+
+    override suspend fun eliminarAdjunto(adjuntoId: Long, autor: Usuario) {
+        val adjunto = adjuntoDao.buscarPorId(adjuntoId) ?: return
+        adjuntoDao.eliminar(adjunto)
+        registrar(adjunto.ticketId, autor, "Documento eliminado: ${adjunto.nombre}", reloj())
     }
 
     private suspend fun registrar(ticketId: Long, autor: Usuario, texto: String, ahora: Long) {
