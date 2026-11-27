@@ -111,7 +111,7 @@ fun LoginScreen(viewModel: AuthViewModel, onIrARegistro: () -> Unit) {
 
             Spacer(Modifier.height(24.dp))
             Text(
-                "Cuentas de prueba (clave Mpaz1234):\nti@mpaz.cl · auxiliar@mpaz.cl · funcionario@mpaz.cl",
+                "Cuentas de prueba (clave Mpaz1234):\nti@mpaz.cl · auxiliar@mpaz.cl · auxiliar2@mpaz.cl · funcionario@mpaz.cl",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

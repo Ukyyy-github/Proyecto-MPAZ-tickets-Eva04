@@ -28,6 +28,9 @@ object Validadores {
         else -> null
     }
 
+    fun nuevaPassword(actual: String, nueva: String): String? =
+        passwordRegistro(nueva) ?: if (actual == nueva) "La nueva contraseña debe ser distinta" else null
+
     fun confirmacion(password: String, confirmacion: String): String? = when {
         confirmacion.isEmpty() -> "Repite la contraseña"
         password != confirmacion -> "Las contraseñas no coinciden"

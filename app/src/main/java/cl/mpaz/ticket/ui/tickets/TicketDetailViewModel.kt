@@ -1,16 +1,19 @@
 package cl.mpaz.ticket.ui.tickets
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import cl.mpaz.ticket.data.FotoStorage
+import cl.mpaz.ticket.data.AdjuntoStorage
 import cl.mpaz.ticket.data.repository.TicketRepository
 import cl.mpaz.ticket.data.repository.UsuarioRepository
+import cl.mpaz.ticket.model.Adjunto
 import cl.mpaz.ticket.model.Comentario
 import cl.mpaz.ticket.model.EstadoTicket
 import cl.mpaz.ticket.model.Prioridad
 import cl.mpaz.ticket.model.Ticket
 import cl.mpaz.ticket.model.Usuario
 import cl.mpaz.ticket.session.SesionActual
+import cl.mpaz.ticket.util.ReglasTicket
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +25,7 @@ class TicketDetailViewModel(
     private val repository: TicketRepository,
     usuarios: UsuarioRepository,
     private val sesion: SesionActual,
-    private val fotos: FotoStorage,
+    private val almacen: AdjuntoStorage,
     private val ticketId: Long
 ) : ViewModel() {
 
@@ -34,14 +37,18 @@ class TicketDetailViewModel(
     val historial: StateFlow<List<Comentario>> = repository.observarHistorial(ticketId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val _auxiliares = MutableStateFlow<List<Usuario>>(emptyList())
-    val auxiliares: StateFlow<List<Usuario>> = _auxiliares.asStateFlow()
+    val adjuntos: StateFlow<List<Adjunto>> = repository.observarAdjuntos(ticketId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _asignables = MutableStateFlow<List<Usuario>>(emptyList())
+    /** Encargados de TI y personal auxiliar: a quienes se puede asignar el ticket. */
+    val asignables: StateFlow<List<Usuario>> = _asignables.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
     init {
-        viewModelScope.launch { _auxiliares.value = usuarios.listarAuxiliares() }
+        viewModelScope.launch { _asignables.value = usuarios.listarAsignables() }
     }
 
     fun cambiarEstado(estado: EstadoTicket) =
@@ -50,17 +57,50 @@ class TicketDetailViewModel(
     fun cambiarPrioridad(prioridad: Prioridad) =
         ejecutar { autor -> repository.cambiarPrioridad(ticketId, prioridad, autor) }
 
-    fun asignar(auxiliar: Usuario) =
-        ejecutar { autor -> repository.asignar(ticketId, auxiliar, autor) }
+    fun asignar(asignado: Usuario) =
+        ejecutar { autor -> repository.asignar(ticketId, asignado, autor) }
+
+    fun asignarmeAMi() {
+        val yo = sesion.usuario.value ?: return
+        asignar(yo)
+    }
+
+    fun quitarAsignacion() =
+        ejecutar { autor -> repository.quitarAsignacion(ticketId, autor) }
 
     fun comentar(texto: String) =
         ejecutar { autor -> repository.comentar(ticketId, autor, texto) }
 
+    fun adjuntarArchivos(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        if (adjuntos.value.size + uris.size > ReglasTicket.MAX_ADJUNTOS) {
+            _error.value = "Máximo ${ReglasTicket.MAX_ADJUNTOS} documentos por ticket"
+            return
+        }
+        ejecutar { autor ->
+            uris.forEach { uri ->
+                val archivo = almacen.copiar(uri)
+                repository.agregarAdjunto(
+                    ticketId, archivo.nombre, archivo.tipoMime, archivo.ruta, archivo.tamano, autor
+                )
+            }
+        }
+    }
+
+    fun quitarAdjunto(adjunto: Adjunto) =
+        ejecutar { autor ->
+            repository.eliminarAdjunto(adjunto.id, autor)
+            almacen.eliminar(adjunto.ruta)
+        }
+
+    /** Uri compartible para abrir el documento con otra aplicación. */
+    fun uriDe(adjunto: Adjunto): Uri = almacen.uriParaAbrir(adjunto.ruta)
+
     fun eliminar(alTerminar: () -> Unit) {
-        val ruta = ticket.value?.fotoPath
+        val rutas = adjuntos.value.map { it.ruta }
         ejecutar {
             repository.eliminar(ticketId)
-            ruta?.let(fotos::eliminar)
+            rutas.forEach(almacen::eliminar)
             alTerminar()
         }
     }
@@ -75,7 +115,7 @@ class TicketDetailViewModel(
             try {
                 bloque(autor)
             } catch (e: Exception) {
-                _error.value = "No se pudo completar la acción: ${e.message ?: "error desconocido"}"
+                _error.value = e.message ?: "No se pudo completar la acción"
             }
         }
     }

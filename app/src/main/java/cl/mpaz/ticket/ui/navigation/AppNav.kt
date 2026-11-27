@@ -19,6 +19,8 @@ import cl.mpaz.ticket.AppContainer
 import cl.mpaz.ticket.ui.auth.AuthViewModel
 import cl.mpaz.ticket.ui.auth.LoginScreen
 import cl.mpaz.ticket.ui.auth.RegisterScreen
+import cl.mpaz.ticket.ui.perfil.PerfilScreen
+import cl.mpaz.ticket.ui.perfil.PerfilViewModel
 import cl.mpaz.ticket.ui.tickets.TicketDetailScreen
 import cl.mpaz.ticket.ui.tickets.TicketDetailViewModel
 import cl.mpaz.ticket.ui.tickets.TicketFormScreen
@@ -31,6 +33,7 @@ object Rutas {
     const val LOGIN = "login"
     const val REGISTRO = "registro"
     const val LISTA = "tickets"
+    const val PERFIL = "perfil"
     const val FORMULARIO = "formulario?ticketId={ticketId}"
     const val DETALLE = "detalle/{ticketId}"
 
@@ -86,7 +89,15 @@ fun AppNav(container: AppContainer) {
             TicketListScreen(
                 viewModel = vm,
                 onAbrirTicket = { navController.navigate(Rutas.detalle(it)) },
-                onCrearTicket = { navController.navigate(Rutas.formulario()) }
+                onCrearTicket = { navController.navigate(Rutas.formulario()) },
+                onAbrirPerfil = { navController.navigate(Rutas.PERFIL) }
+            )
+        }
+        composable(Rutas.PERFIL) {
+            val vm: PerfilViewModel = viewModel(factory = Fabricas.perfil(container))
+            PerfilScreen(
+                viewModel = vm,
+                onVolver = { navController.popBackStack() }
             )
         }
         composable(

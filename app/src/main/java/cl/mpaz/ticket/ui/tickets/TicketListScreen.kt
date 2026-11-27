@@ -15,11 +15,13 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -47,10 +49,12 @@ import cl.mpaz.ticket.util.numeroTicket
 fun TicketListScreen(
     viewModel: TicketListViewModel,
     onAbrirTicket: (Long) -> Unit,
-    onCrearTicket: () -> Unit
+    onCrearTicket: () -> Unit,
+    onAbrirPerfil: () -> Unit
 ) {
     val usuario by viewModel.usuario.collectAsState()
     val tickets by viewModel.tickets.collectAsState()
+    val vista by viewModel.vista.collectAsState()
     val filtro by viewModel.filtro.collectAsState()
     val puedeCrear = usuario?.let { ReglasTicket.puedeCrear(it) } == true
 
@@ -58,7 +62,12 @@ fun TicketListScreen(
         topBar = {
             TopAppBar(
                 title = { Text("MPAZ Ticket") },
-                actions = { TextButton(onClick = { viewModel.cerrarSesion() }) { Text("Salir") } }
+                actions = {
+                    IconButton(onClick = onAbrirPerfil) {
+                        Icon(Icons.Default.Person, contentDescription = "Mi perfil")
+                    }
+                    TextButton(onClick = { viewModel.cerrarSesion() }) { Text("Salir") }
+                }
             )
         },
         floatingActionButton = {
@@ -80,9 +89,9 @@ fun TicketListScreen(
                         fontWeight = FontWeight.Bold
                     )
                     val descripcion = when (u.rol) {
-                        Rol.ENCARGADO_TI -> "Bandeja central: todos los tickets"
-                        Rol.FUNCIONARIO -> "Tus solicitudes de mantención"
-                        Rol.AUXILIAR -> "Tickets asignados a ti"
+                        Rol.ENCARGADO_TI -> "Bandeja central de tickets"
+                        Rol.FUNCIONARIO -> "Reporta y sigue tus solicitudes"
+                        Rol.AUXILIAR -> "Revisa y atiende tus tickets"
                     }
                     Text(
                         "${u.rol.etiqueta} · $descripcion",
@@ -92,6 +101,22 @@ fun TicketListScreen(
                 }
             }
 
+            // Vista: todos / míos / asignados a mí
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                VistaTickets.entries.forEach { opcion ->
+                    FilterChip(
+                        selected = vista == opcion,
+                        onClick = { viewModel.seleccionarVista(opcion) },
+                        label = { Text(opcion.etiqueta) }
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+
+            // Estado
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -100,7 +125,7 @@ fun TicketListScreen(
                     FilterChip(
                         selected = filtro == null,
                         onClick = { viewModel.seleccionarFiltro(null) },
-                        label = { Text("Todos") }
+                        label = { Text("Cualquier estado") }
                     )
                 }
                 items(EstadoTicket.entries) { estado ->
@@ -116,7 +141,12 @@ fun TicketListScreen(
             if (tickets.isEmpty()) {
                 Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                     Text(
-                        if (filtro == null) "Aún no hay tickets para mostrar" else "No hay tickets con ese estado",
+                        when {
+                            filtro != null -> "No hay tickets con ese estado en esta vista"
+                            vista == VistaTickets.MIOS -> "Aún no has creado tickets"
+                            vista == VistaTickets.ASIGNADOS -> "No tienes tickets asignados"
+                            else -> "Aún no hay tickets para mostrar"
+                        },
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -159,6 +189,13 @@ private fun TicketCard(ticket: Ticket, onClick: () -> Unit) {
             )
             Text(
                 "${ticket.categoria.etiqueta} · ${ticket.ubicacion}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                "Reportado por ${ticket.solicitanteNombre} · ${ticket.asignadoNombre?.let { "Asignado a $it" } ?: "Sin asignar"}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

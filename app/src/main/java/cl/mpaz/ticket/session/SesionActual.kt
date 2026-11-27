@@ -21,6 +21,11 @@ class SesionActual(context: Context) {
         _usuario.value = usuario
     }
 
+    /** Refresca el usuario en memoria (por ejemplo, tras editar el perfil). */
+    fun actualizarUsuario(usuario: Usuario) {
+        _usuario.value = usuario
+    }
+
     fun cerrar() {
         prefs.edit().remove(CLAVE_ID).apply()
         _usuario.value = null

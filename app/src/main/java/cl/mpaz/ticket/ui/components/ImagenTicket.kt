@@ -23,10 +23,10 @@ import java.io.InputStream
 
 /** Muestra una imagen desde una ruta de archivo ([String]) o una [Uri] de la galería. */
 @Composable
-fun ImagenTicket(fuente: Any?, modifier: Modifier = Modifier) {
+fun ImagenTicket(fuente: Any?, modifier: Modifier = Modifier, anchoMaximo: Int = 1600) {
     val context = LocalContext.current
-    val resultado by produceState<Pair<Boolean, ImageBitmap?>>(initialValue = false to null, fuente) {
-        value = true to withContext(Dispatchers.IO) { cargarBitmap(context, fuente) }
+    val resultado by produceState<Pair<Boolean, ImageBitmap?>>(initialValue = false to null, fuente, anchoMaximo) {
+        value = true to withContext(Dispatchers.IO) { cargarBitmap(context, fuente, anchoMaximo) }
     }
     val (terminado, bitmap) = resultado
 
@@ -44,7 +44,7 @@ fun ImagenTicket(fuente: Any?, modifier: Modifier = Modifier) {
     }
 }
 
-private fun cargarBitmap(context: Context, fuente: Any?): ImageBitmap? = runCatching {
+private fun cargarBitmap(context: Context, fuente: Any?, anchoMaximo: Int): ImageBitmap? = runCatching {
     fun abrir(): InputStream? = when (fuente) {
         is Uri -> context.contentResolver.openInputStream(fuente)
         is String -> File(fuente).inputStream()
@@ -54,7 +54,7 @@ private fun cargarBitmap(context: Context, fuente: Any?): ImageBitmap? = runCatc
     val limites = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     abrir()?.use { BitmapFactory.decodeStream(it, null, limites) }
     var muestra = 1
-    while (limites.outWidth / muestra > 1600) muestra *= 2
+    while (limites.outWidth / muestra > anchoMaximo) muestra *= 2
 
     val opciones = BitmapFactory.Options().apply { inSampleSize = muestra }
     abrir()?.use { BitmapFactory.decodeStream(it, null, opciones) }?.asImageBitmap()
